@@ -1,0 +1,206 @@
+IO---NIO---NETTY--RPC
+
+
+　　4 也可以通过选中一个变量或者表达式，按ctrl+shift+i 来查看内容。或者添加监视的方式，查看。
+
+　　5 可以通过快捷键F2,来查看一个函数方法的javadoc，即说明
+
+　　6 快捷键F3或者ctrl+鼠标点击，进入一个函数
+
+　　7 ctrl+shift+G 查看当前方法都有谁在使用
+
+　　8 F4查看类的继承关系，可以向上显示出类继承的父类以及接口。
+
+
+spring IOC的流程
+	1.编写接口
+		public interface Ainterface{ public void getDate();	}
+	2.编写具体实现的类，实现接口
+		public class Bclass implement Ainterface{ public void getDate(){//具体代码}	}
+	3.编写业务逻辑类，只针对接口编程
+		public class Business{ 
+			private Ainterface a; 
+			public void setAinterface(Ainterface a){
+				this.a=a;
+			}
+			public void getDate(){ ... a.getDate(); ...}
+		}
+	4.编写测试类
+		public class TestBusiness{
+			private Business business =new Business();
+			...
+			//根据注入的类，执行方法
+			public void getDate(){
+			...
+			business.setAinterface(new Bclass());
+			business.getDate();
+			...
+			}
+		}
+
+Tomcat配置文件 conf/server.xml
+<!-- 写到WebRoot目录层-->
+ <Context  path="/holo"  docBase ="E:\workspace\holo"  debug="0" reloadable="false">
+ <Resource name="jdbc/orcl101"
+	      	driverClassName="oracle.jdbc.driver.OracleDriver" 
+	      	maxActive="100" maxIdle="1" maxWait="120000" 
+	      	type="javax.sql.DataSource" 
+	      	url="jdbc:oracle:thin:@15.48.188.201:1521:orcl" 
+	      	username="runvista" 
+	      	password="runco" 
+	      	testOnReturn="true" 
+	      	auth="Container" 
+	      	validationQuery="select 1 from dual"/> 
+ </Context>
+ 
+
+数据库方面
+       	
+	JDBC
+	1.加载驱动
+		Mysql驱动名：com.mysql.jdbc.Driver
+		Oracle驱动名：oracle.jdbc.driver.OracleDriver
+		加载方式：Class.forName(驱动名);
+	2.连接及关闭数据库
+		DriverManager（连接管理类）：主要获取一个数据库			
+	
+	3.PreparedStatement接口是Statement的子接口，属于预处理操作。操作时，先在数据表中准备好一条sql语句，但具体内容不设置
+		String sql="insert into t_book values(null,?,?,?,?)";
+		PreparedStatement pstmt=con.prepareStatement(sql);
+		pstmt.setString(1,book.getBookName());
+		pstmt.setFloat(2,book.getPrice());
+		pstmt.setString(3,book.getAuthor());
+		pstmt.setInt(4,book.getBookTypeId());
+		int result=pstmt.executeUpdate();
+		close();
+		return result;
+	4.向数据库中存文本	File context=book.getContext();	InputStream is=new FileInputStream(context); pstmt.setAsciiStream(5,is,context.length());
+	  从数据库中读取文本文件 Clob c=rs.getClob("context");
+
+	  存二进制文件（图片） File pic=book.getPic(); InputStream is2=new FileInputStream(pic); pstmt.setBinaryStream(6,is2,pic.length());
+	  获取长文本（getBlob）Bolb b=rs.getBlob("pic");  FileOutputStream fos=new FileOutputStream(new File("d:/pic.jpg")); out.write(b.getBytes(1,(int)b.length())); out.close();
+	5.callable
+	6.DatabaseMetaData dmd=conn.getMetaData();获取数据库基本信息（数据库的名称、版本以及得到的表的信息）
+		String getDatabaseProductName()		//获取数据库产品的名称
+		int getDriverMajorVersion() 			//获取此JDBC驱动程序的主版本号
+		int getDriverMinorVersion() 			//获取此JDBC驱动程序的次版本号
+	  ResultSetMetaData									//获取result对象中的信息
+		int getColumnCount() 							//返回此ResultSet对象中的列 
+		String getColumnName(int cloumn) 	//获取指定列的名称
+		int getColumnTypeName(int cloumn) //获取指定列的SQL类型名称
+
+	7.事务：所有的操作要么一起成功，要么一起失败。事物本身就有原子性（Atomicity）、一致性（Consistency）、隔离性（Isolation）、持久性（Durability）。也称ACID特性
+		原子性：事务的最小的单元；必须同时成功，如果一个失败了，那都会失败。
+		一致性：指的是数据库操作的前后是完全一致的。如果系统出错了，就回到最原始状态，保证事务开始时和结束时处于一致状态
+		隔离性：多个事务同时进行但彼此之间无法访问，只有当事务完成了最终操作时，才能看到结果
+		持久性：事务完成后，对于系统的影响是永久性的。即便该修改出现致命的系统故障也将一直保持
+	  conn.setAutomit(false); //取消自动提交
+	  Savepoint sp=conn.setSavepoint();//设置保存点
+	  //数据库操作代码
+	  conn.rollback(sp);//回滚到sp保存点
+	  finally{
+			conn.commit();//提交事务
+			conn.close();
+		  }
+
+	--to_date来对数据的时间进行格式化
+	select * from pf_systemlog t where t.orgname='测试组' and createtime > to_date('2016-01-01', 'yyyy-mm-dd')
+	--查询并分组
+	select field1,MAX(field2),COUNT(field3),SUM(field4),..... from table GROUP BY field1
+	select '重点人' DQB类型,
+         b.xm 姓名,
+         b.sfzh 身份证号,
+         (select wm_concat(distinct c.type)
+            from BJSC_DQB_T_DICTIONARY_GABYW2 c
+           where c.typecode in
+                 (select distinct substr(regexp_substr(b.zdryxl,
+                                                       '[^,]+',
+                                                       1,
+                                                       level),
+                                         0,
+                                         2)
+                    from dual
+                  connect by regexp_substr(b.zdryxl, '[^,]+', 1, level) is not null)) 重点人员类别标记,
+         (select wm_concat(c.detail)
+            from BJSC_DQB_T_DICTIONARY_GABYW2 c
+           where c.detail_type in
+                 (select distinct regexp_substr(b.zdryxl, '[^,]+', 1, level)
+                    from dual
+                  connect by regexp_substr(b.zdryxl, '[^,]+', 1, level) is not null)) 重点人员细类,
+         b.nrbjzdryksj 纳入部级重点人员库时间,
+         b.xzdxz 现住地详址,
+         b.hjdxz 户籍地详址,
+         '外卖人员' 协议,
+         (select max(name)
+            from BJSC_companyname c
+           where c.code = d.icp_provider) 网站,
+         d.user_id 用户ID,
+         d.REGIS_TIME 注册时间,
+         d.contactor_tel 联系电话,
+         d.logid
+    from BJSC_DQB_QZDR01 b, BJSC_WZ_WAIMAIRENYUAN  d
+	where b.sfzh = d.pickup_certificate_code
+	
+	查询并分组
+	select field1,MAX(field2),COUNT(field3),SUM(field4),..... from table GROUP BY field1	
+	在数据库中查询的时候在最后加上 FOR UPDATE 后，oracl库表的“锁”按钮才会解开，才能对数据进行增删改查。
+	MySql：向数据库中导入.sql文件，命令行窗口，mysql -uroot -p ;然后是mysql>source <filename>(其中不能有‘-’等)  |||||| 导出sql脚本  mysqldump -uroot -p test>c:/a.sql  (mysqldump -u 用户名 -p数据库名>存放位置)
+	outfile.getParentFile().mkdirs();
+    System.out.println("path=" + outfile.getAbsolutePath());
+	
+	读取文件并用输出流输出
+	FileInputStream fis = new FileInputStream(outfile);
+    BufferedInputStream buff = new BufferedInputStream(fis);
+    byte[] b = new byte[1024];
+    long k = 0L;
+    OutputStream myout = response.getOutputStream();
+    while (k < outfile.length()) {
+     int j = buff.read(b, 0, 1024);
+     k += j;
+     myout.write(b, 0, j);
+    }
+	
+	equals使用的时候，尽量把不确定的放到右边，已经确定的放到左边。这样不会报出空指针异常
+	
+	web工程发布到tomcat
+　　  方法1、将编译过的工程目录（webroot目录）拷贝到$CATALINA_HOME\webapps下，然后启动服务器就可以了。访问http://localhost:8080/ywb/ 
+
+  　　方法2、修改server.xml ,配置工程路径即可。方法如下，更改$CATALINA_HOME\conf\server.xml文件，在<host>标签内添加<Context>标签，内容如下： 
+			<Context docBase="D:/workspaces/ywb/webroot" reloadable="false" path="/ywb"/> 
+			其中reloadable="false"表示当应用程序中的内容发生更改之后服务器不会自动加载，这个属性在开发阶段通常都设为true，方便开发，在发布阶段应该设置为false，提高应用程序的访问速度。docBase为路径，可以使用绝对路径，也可以使用相对路径，相对路径相对于webapps。path属性的值是访问时的根地址。
+ 
+      方法3、添加xml文件，配置工程路径。而是在$CATALINA_HOME\conf\Catalina\localhost中添加一个xml文件，如ywb.xml，内容如下： 
+			<Context docBase="D:/workspaces/ywb/webroot" reloadable="false" />，这种方式服务器会使用.xml的名字作为path属性的值。
+	
+	
+	运行jar时候，有的没有指定main方法入口，需要在MANIFEST.MF文件中增加Main-class: com.test.main			java -jar test.jar
+	导入证书	(需要提前有安全证书)	CMD 进入 D:jdk\bin	，然后 keytool -import -v -trustcacerts -alias taobao -file taobao.cer -storepass changeit -keystore %JAVA_HOME%/jre/lib/security/cacerts 
+						//解释说明：
+							1、taobao 是可以自己修改的名称，  taobao.cer 是导出的证书，同样，这里的证书名字也是随便取的，但前提是保证将C:\Program Files\Java\jdk1.6.0_24\jre\lib\security目录的cacerts文件内之前没有导入同名证书，就是要保证你将要导入的证书名称唯一性。
+							2、changeit 是密码， java默认的。 
+							3、keytool是jdk中bin目录的一个exe文件，是jdk默认自带的，在我电脑的目录是：C:\Program Files\Java\jdk1.6.0_24\jre\bin\keytool.exe
+							4、%JAVA_HOME%/jre/lib/security/cacerts 这个路径中%JAVA_HOME%/jre/lib/security/是路径，cacerts是文件（即将要把证书导入到其中的文件）。当然要确保你已经配置过java_home环境变量，我的java_home环境变量为：C:\Program Files\Java\jdk1.6.0_24
+							5、其他保持不变。
+							6、如果提示："是否信任此证书? [否]:"  ，那么请输入"y"。
+			当出现：”证书已添加到密钥库中 [正在存储cacerts]“的时候，那么恭喜你已经添加成功。
+	
+	windows端口被占用的解决办法
+	首先在命令窗口输入 netstat -ano  查询出所有的任务和使用端口；在占用的端口处找到对应的pid
+	再输入tasklist 来找到对应的进程名称和pid
+		-输入-netstat -ano|find "8080 "
+			 -tasklist|find "PID "
+			 -taskkill /pid PID /f    --强制执行
+	最后用任务管理器关掉相应进程就ok
+	
+	public AppException(String message, String...args)
+	解析：
+	1.数组	String...args = String[] args		动态参数
+	2.可以传多（0~n）个String参数给这个方法		（就是无限参数 ）
+	
+	//利用java反射机制进行类的映射和调用
+	method = PageAttribUtil.class.getMethod(methodName, classParam);
+      content = method.invoke(this, objArgs).toString();
+	
+	
+	http://211.68.208.76/business/login.do  天津外国语大学
+	

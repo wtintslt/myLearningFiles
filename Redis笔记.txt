@@ -1,0 +1,423 @@
+REDIS	REmote DIctionary Server 远程字典服务器
+1.特点概述
+
+1.1数据存储
+	以字典结构存储数据。Redis字典中的键值除了可以是字符串，还可以是其它数据类型。包括：字符串类型、散列类型、列表类型、集合类型、有序集合类型
+		demo：在程序中使用post变量存储了一篇文章的数据（标题、正文、阅读量、标签）
+			post["title"] = "Hello World！"
+			post["content"] = "Blablabla..."
+			post["view"] = 0
+			post["tags"] = ["PHP","Rubby","Node.js"]
+	所有数据都存储在内存中，同时提供对持久化的支持（可以将内存中的数据异步写入到硬盘中，同时不影响继续提供服务）
+	
+1.2其它功能
+	Redis可以为每个键设置生存时间（Time To Live,TTL）,生存时间到期后键会自动被删除。所以可以作为缓存系统使用（Redis是单线程模式，适用于高级数据类型或者持久化功能；Memcached支持多线程，多核服务器上性能更佳）
+	作为缓存系统，redis还可以限定数据占用的最大内存控件，达到空间限制后可以按照一定规则自动淘汰不需要的键
+	列表类型键可以用来实现队列，并且支持阻塞式读取，可以很容易实现一个高性能的优先级队列。
+	在更高层面上，redis还支持“发布/订阅”的消息模式，可以基于此构建聊天室系统
+	
+1.3简单稳定
+	在redis中要读取键名为post:1的散列类型键的title字段的值，可以使用如下命令语句实现   HGET post:1 title
+	开源，用C编写
+
+	
+2.命令（两种类型，直接将参数追加 redis-cli -h 127.0.0.1 -p 6379	 redis-cli PING	或redis-cli;PING）
+
+2.1命令返回值
+	1.状态回复：redis>PING  \n PONG 	
+	  错误回复：redis>ERRORCOMMEND \n  (error)ERR UNKNOWN COMMAND 'ERRORCOMMEND'
+	  整数回复：redis>INCR foo //递增键值INCR  \n  (integer) 1 		
+	  字符串回复: redis>GET foo \n  "1"
+		//当请求的键值不存在会得到一个空结果，显示为(nil)    redis>GET noexists \n (nil)
+	  多行字符串回复: redis>KEYS *   \n  1)"bar"  2)"foo"   //KEYS命令是获取数据库中符合指定规则的键名
+2.2选择数据库
+	redis不支持自定义数据库的名字，每个数据库都以编号命名，开发者必须自己记录哪些数据库存储了哪些数据。而且不支持每个数据库设置不同密码。
+	多个数据库之间并不是完全隔离的，比如FLUSHALL命令可以清空一个redis实例中所有数据库中的数据。所以数据库更像是一中命名空间，比如0号存储生产环境中的数据，1号存储测试环境中的数据。
+	select 0  //redis默认支持16个数据库。每个对外都是以一个从0开始递增数字命名
+	
+2.3 KEYS pattern // ? 单个字符  ；   * 任意个字符（包括0个）	;		[] 匹配括号之间的任一字符，可用“-”表示范围  如a[b-d]可以匹配“ab”、“ac”、“ad”
+					\X	匹配字符X，用于转义
+	redis>SET bar 1	 \n    ok  	//在数据库中建立名为bar的键
+	redis>EXISTS bar   \n   1	//判断键名为bar的是否存在，存在返回1，否则0
+	DEL key[key...]		//删除一个或多个键，返回值是删除的个数
+	TYPE key 			//获得键值的数据类型；返回值可能是string（字符串）  hash（散列类型）  list（列表类型）  set（集合类型）  zset（有序集合）
+
+2.4赋值和取值
+	SET key value		//key="hello"
+	GET key 			//GET key     \n  "hello"
+	
+2.5增加和减少值
+	INCR num 			//当存储的字符串是整数形式时，INCR让当前键值递增，并返回递增后的值
+	INCRBY KEY increment	//增加指定的整数。可以通过increment参数指定一次增加的数值
+	
+	DECR KEY 	//键值递减
+	DECRBY KYE decrement	//通过参数让键值减少指定的值
+	
+	⑵增加指定浮点数
+	INCRBYFLOAT KEY increment	// redis>GET bar   /n (integer) 4   ; redis>INCRBYFLOAT bar 2.7  /n  "6.7"
+	
+	⑶向尾部追加值
+	APPEND KEY value	//向尾部追加value。如果键不存在就将该键的值设置成value。返回值是追加后字符串的总长度
+						//SET key hello  /n OK  ;	APPEND key " world!"   /n (integer) 12	 //第二个参数加了双引号，是因为该参数包含空格
+	
+	⑷获取字符串长度
+	STRLEN KEY 	//返回键值的长度，如果键不存在则返回0		redis>STRLEN key  /n  (integer) 12  ;redis>SET key 你好 /n  OK ;redis>STRLEN key /n (integer) 6
+				//字符串类型可以存储二进制数据，所以它可以存储任何编码的字符串。
+				
+	⑸同时获得/设置多个键值
+	MGET KEY [KEY ...]			//redis>GET KEY2   /n "V2"	;redis>MGET KEY1 KEY3 /n  1)"V1" 2)"V3"
+	MSET KEY VALUE [KEY VALUE ...]	//redis>MSET KEY1 V1 KEY2 V2 KEY3 V3	/n OK
+	
+	⑹位操作
+	GETBIT key offset 	//获得一个字符串类型键指定位置的二进制位的值（0或1），如果超出实际长度则默认值是0
+	SETBIT key offset 	//设置字符串类型键指定位置的二进制位的值，返回值是该位置的旧值
+	BITCOUNT key [start] [end]	//获取字符串类型键中值是1的二进制位个数；也可以通过参数来限制统计的字节范围，如只希望统计前两个字节（即“aa”）：redis>
+	BITOP operation destkey key [key...]
+			一个字节由8个二进制位组成，Redis提供了4个命令可以直接对二进制位进行操作。
+			redis>SET foo bar /n ok ;bar的3个字母对应的ASCII码分别为98、97和114，装换为二进制分别为1100010 1100001 1110010。所以foo键中的二进制位结构为 01100010011000101110010
+			redis>SETBIT foo 6 0 /n  (integer) 1 ;redis>SETBIT foo 7 1 /n  (integer) 0 ; redis>GET foo  /n  "aar" 
+			redis>BITCOUNT foo 0 1 /n (integer) 6 ;统计前两个字节（“aa”）
+			redis>SET foo1 bar  /n  OK ; redis>SET foo2 aar /n OK ;redis>BITOP OR res foo1 foo2 /n (integer) 3 ;
+			redis>GET res /n "car"	;即把foo1、foo2的所有字节（“bar”、“aar”）全部变成8位的0/1表示，然后取OR
+		利用位操作命令可以非常紧凑地存储布尔值。比如某网站的每个用户都有一个递增的整数ID，如果使用一个字符串类型键配合位操作来记录每个用户的性别（用户ID作为索引，二进制位值1和0表示男女），
+		那么记录100万个用户的性别只需要占用100KB多的空间，而且由于GETBIT和SETBIT的时间复杂度都是O(1)，所有读取二进制位值性能很高
+3.散列类型
+
+	Redis是采用字典结构以键值对的形式存储数据的，而散列类型(hash)的键值也是一中字典结构，其存储了字段（field）和字段值的映射。
+	但字段值只能是字符串，不支持其它数据类型，换句话说，散列类型不能潜逃其它的数据类型。一个散列类型键可以包含至多2^32-1个字段
+	
+	散列类型适合存储对象：使用对象类别和ID构成键名，使用字段表示对象的属性，而字段值则存储属性值。
+		//demo：要存储ID为2的汽车对象，可以分别使用名为color、name和price的3个字段来存储该辆汽车的颜色、名称和价格。
+				存储结构：	 键			字段		 值
+							car：2 --  color		白色
+										name		奥迪
+										price		90万
+3.1命令
+	
+	⑴赋值与取值
+		redis>HSET car price 500 /n (integer) 1
+		redis>HSET car name BMW	/n	(integer) 1
+		redis>HGET car name 	/n	"BMW" 
+		散列类型键的HSET命令的放百年之处在于不区分插入和更新操作，即修改数据时不用事先判断字段是否存在来决定要执行的是插入还是更新
+		当执行是是插入操作时（即之前字段不存在）HSET命令会返回1，当执行的是更新操作时（即之前字段已经存在）HSET命令会返回0。不存在还会创建
+		redis>HMSET car price 500 name BMW  //批量设置字段值
+		redis>HMGET car price name /n  1)"500"  2)"BMW"		//批量获取字段
+		redis>HGETALL car  /n  1)"price" 2)"500" 3)"name" 4)"BMW"	//获取键中所有字段和字段值
+	
+	⑵判断字段是否存在
+		redis>HEXISTS car model  /n  (integer) 0
+		redis>HSET car model c200 /n  (integer) 1
+		redis>HEXISTS  car model  /n  (integer) 1
+		
+	⑶当字段不存在时赋值
+		HSETNX key field value 
+		HSETNX命令与HSET命令类似，区别在于如果字段已经存在，HSETNX命令将不执行任何操作
+		
+	⑷增加数字
+		HINCRBY key field increment 
+		和字符串类型的INCRBY类似，可以使字段增加指定的整数
+		
+	⑸删除字段
+		redis>HDEL car price  /n (integer) 1
+		redis>HGET car price  /n (integer) 0
+	
+	⑹只获取字段名或者字段值
+		redis>HKEYS car   /n  1)"name" 2)"model"
+		redis>HVALS car   /n  1)"BMW"  2)"c200"
+	
+	⑺获得字段数量
+		redis>HLEN car   /n  (integer) 2
+
+4.列表类型
+
+	可以存储一个有序的字符串列表，常用的操作是向列表两段添加元素或者获得列表的某一片段
+	列表类型内部使用双向链表实现的。所以向列表两段添加元素的时间复杂度为O(1)，获取越接近两段的元素速度越快
+	缺点是通过索引访问元素比较慢
+	适用范围：如社交网站的新鲜事，关心的只是最新的内容，使用列表类型存储，即使新鲜事总数几千万，获取其中最新的100条数据也是极快的。
+	同样因为在两端插入记录的时间复杂度是O(1)，
+				列表类型也适合用来记录日志，可以保证加入新日志的速度不会收到已有日志数量的影响
+				借助列表类型，Redis好可以作为队列使用
+	一个列表类型键最多能容纳2^32-1个元素
+4.1命令
+  
+	⑴向列表两段增加元素
+		LPUSH key value [value ...]	 	//LPUSH命令用来向列表左边增加元素
+		RPUSH key value [value ...]	
+		redis>LPUSH number 1  /n  (integer) 1		//返回值表示增加元素后列表的长度
+		redis>LPUSH number 2 3  /n  (integer) 3		//此时的列表元素从左到右 分别为 3 2 1 
+		redis>RPUSH number 0 -1  /n  (integer) 5	//此时的列表长度为5，从左到右分别为  3 2 1 0 -1
+
+	
+	⑵从列表两端弹出元素
+		LPOP key 	//LPOP命令执行两步操作：1.将左边的元素从列表中移除  2.返回被移除的元素值
+		RPOP key 
+		redis>LPOP number   /n  "3"
+		redis>RPOP number   /n  "-1"    
+		
+	⑶获取列表中元素的个数
+		LLEN key 	//当键不存在时LLEN会返回0
+		redis>LLEN number   /n  (integer) 3
+		
+	⑷获得列表片段
+		LRANGE key start stop		//能获取列表某一片段。LRANGE命令将返回索引从start到stop之间的所有元素，包括两端
+		redis>LRANGE number 0 2	 /n  1)"2"	2)"1"	3)"0"	//不会删除该片段
+		负索引表示从右边开始计算序数。“-1”表示最右边第一个元素，LRANGE number 0 -1可以获取列表中所有元素
+		如果start的索引位置比stop的索引位置靠后，则会返回空列表；如果stop大于实际的索引范围，则会返回到列表最右边的元素
+	
+	⑸删除列表中指定的值
+		LREM key count value 	//删除列表中前cont个值为value的元素，返回值是实际删除的元素个数
+								count>0,LREM命令会从列表左边开始删除前count个值为value的元素
+								count<0,LREM命令会从列表右边开始删除前|count|个值为value的元素
+								count=0,LREM命令会删除所有值为value的元素
+		redis>RPUSH number 2    /n  (integer) 4
+		redis>LRANGE number 0 -1  /n  1)"2" 2)"1" 3)"0" 4)"2"
+		redis>LREM number -1 2  /n  (integer) 1 //从右边开始删除第一个值为“2”的元素
+		redis>LRANGE number 0 -1  /n  1)"2" 2)"1" 3)"0"
+
+	⑹获得/设置指定索引的元素值
+		LINDEX key index	//返回指定索引的元素，索引从0开始，负数表示从右边开始计算
+		LSET key index value	//将索引为index的元素赋值为value
+		redis>LSET number 1 7 /n  OK
+		redis>LINDEX number 1	/n  "7"
+
+	⑺只保留列表指定片段
+		LTRIM key start end //删除指定索引范围之外的所有元素
+		redis>LRANGE number 0 1  /n  1)"1"	2)"2"	3)"7"	4)"3"
+		redis>LTRIM number 0 1  /n  OK
+		redis>LRANGE number 0 1 /n  1)"2"	2)"7"
+		
+	⑻向列表中插入元素
+		LINSERT key BEFORE|AFTER pivot value 
+		LINSERT命令首先会在列表中从左到右查找值为pivot的元素，
+		然后根据第二个参数BEFORE还是AFTER来决定将value插入到该元素的前面还是后面
+		redis>LINSERT number AFTER 7 3  /n  (integer) 4
+		redis>LRANGE number 0 -1  /n  1)"2"	2)"7"	3)"3"
+	
+	⑼将元素从一个列表转移到另一个列表
+		RPOPLPUSH source destination 	//先执行RPOP命令再执行LPUSH命令。
+										先从source列表类型键的右边弹出一个元素，然后将其加入到destination类编类型键的左边，并返回这个元素的值
+	
+
+5.集合类型
+
+	在集合中的每个元素都是不同的，且没有顺序。一个集合类型（set）键可以存储至多2^32-1个字符串
+	常用操作是向集合中加入或删除元素、判断某个元素是否存在等。由于集合类型在redis内部是使用值为空的散列表（hash table）实现的，
+	所以这些操作的时间复杂度都是O(1)。最方便的是多个集合类型之间还可以进行并集、交集和差几运算。
+	
+5.1命令		
+	
+	⑴增加/删除元素
+		SADD key member [member ...]	//想集合中增加一个或多个元素，如果键不存在就会自动创建；已经存在的就会忽略这个元素 
+		SREM key member [member ...]	//从集合中删除一个或多个元素，并返回删除成功的个数
+		redis>SADD letters a  /n  (integer) 1 
+		redis>SADD letters a b c  /n (integer) 2
+		redis>SREM letters c d   /n   (integer) 1   //由于"d"不存在，所以只删除一个
+
+	⑵获得集合中的所有元素
+		SMEMBERS key
+		redis>SMEMBERS letters   /n    1)"b"  2)"a"
+		
+	⑶判断元素是否在集合中
+		SISMEMBER key member 	//判断一个元素是否在集合中是一个时间复杂度为O(1)的操作
+		redis>SISMEMBER letters a   /n   (integer) 1
+		redis>SISMEMBER letters d   /n   (integer) 0
+	
+	⑷集合间运算
+		SDIFF key [key ...]		//对多个集合执行差集运算，属于A且不属于B的元素
+		SINTER key [key ...]	//对多个集合执行交集运算，属于A且属于B的元素
+		SUNION key [key ...]	//对多个集合执行并集运算，属于A或属于B的元素
+	
+	⑸获得集合中元素个数
+		SCARD key 
+		redis>SMEMBERS letters   /n  1)"b"	2)"a"
+		redis>SCARD letters   /n   (integer) 2
+		
+	⑹进行集合运算并将结果存储
+		SDIFFSTORE destination key [key ...]	//常用语需要进行多步集合运算的场景中。不会直接返回运算结果，而是将结果存储在destination键中
+		SINTERSTORE destination key [key ...]
+		SUNIONSTORE destination key [key ...]
+	
+	⑺随机获得集合中的元素
+		SRANDMEMBER key [count]	//根据传递的count参数来一次随机获得多个元素。
+									当count为正数时，SRANDMEMBER会随机从集合里获得count个不重复元素。当count值大于集合中元素个数，返回集合中全部元素
+									当count为负数时，SRANDMEMBER会随机从集合里获得|count|个的元素，这些元素有可能相同
+		//	散列表存储结构使用散列函数将元素映射到不同的存储位置（桶）上。当两个不同的元素的散列值相同时，Redis使用拉链发来解决冲突，即将散列值相同的元素以链表形式存入同一桶
+			Redis会先从桶中随机跳一个非空桶，然后再从桶中随机选择一个元素
+	
+	⑻从集合中弹出一个元素
+		SPOP key		//由于集合类型的元素是无序的，所以SPOP命令会从集合中随机选择一个元素弹出
+	
+6.有序集合类型
+
+	在集合类型的基础上有序集合为集合中的每个元素都关联了一个分数，这使得我们不仅可以完成插入、删除和判断元素是否存在等集合类型支持的操作，
+	还能获得分数最高（最低）的前N个元素、获得指定分数范围内的元素等与分数有关的操作。虽然集合中每个元素都是不同的，但是它们的分数却可以相同
+	
+	有序集合类型和列表类型的区别：
+		(1)列表类型是通过链表实现，获取靠近两段的数据速度极快。元素多的时候，访问中间数据的速度会较慢。所以它更适合实现“新鲜事”、“日志”这样很少访问中间元素的应用
+		(2)有序集合类型是使用散列表和跳跃表(Skip list)实现的，所以即使读取位于中间部分的数据速度也很快（时间复杂度是O(log(N))）
+		(3)列表中不能简单地调整某个元素的位置，但有序集合可以（通过更改这个元素的分数）
+		(4)有序集合要比列表类型更耗费内存
+
+6.1命令		
+
+	⑴增加元素
+		ZADD key score member [score member ...] //向有序集合中加入一个元素和该元素的分数，如果元素已经存在则会用新的分数替换缘由的分数
+		redis>ZADD scoreboard 89 Tom  67 Peter 100 David	/n (integer) 3	
+		redis>ZADD scoreboard 76 Peter  /n (integer) 0   //返回的是新加入到集合中的元素个数
+		分数不仅可以是整数，还支持双精度浮点数
+		
+	⑵获得元素的分数
+		ZSCORE key member 
+		redis>ZSCORE scoreboard Tom  /n  "89"
+		
+	⑶获得排名在某个范围的元素列表
+		ZRANGE key start stop [WITHSCORES]
+		ZREVRANGE key start stop [WITHSCORES]
+		redis>ZRANGE scoreboard 0 2		/n	1)"Peter" 2)"Tom" 3)"David"
+		redis>ZRANGE scoreboard 1 -1	/n  1)"Tom"	2)"David"
+		如果需要同时获得元素的分数可以在ZRANGE命令的尾部加上WITHSCORES参数
+		redis>ZRANGE scoreboard 0 -1 WITHSCORES  
+				1)"Peter"  2)"76"	3)"Tom"	4)"89"	5)"David"	6)"100"
+	
+	⑷获得指定分数范围的元素
+		ZRANGEBYSCORE key min max [WITHSCORES]	[LIMIT offset count]
+			按照元素分数从小到大的顺序返回分数在min和max之间（包含min和max）的元素
+		redis>ZRANGEBYSCORE scoreboard 80 100	/n 	1)"Tom"	2)"David"
+		redis>ZRANGEBYSCORE scoreboard 80 (100	/n	1)"Tom"  //可以包含80分，但不包含100分
+		redis>ZRANGEBYSCORE scoreboard (80 +inf	/n	1)"Tom"	2)"David"	//-inf和+inf分别表示负无穷和正无穷
+		redis>ZRANGEBYSCORE scoreboard (60 +inf LIMIT 1 3  //获得分数高于60的从第二个人开始的三个人
+		
+	⑸增加某个元素的分数
+		ZINCRBY key increment member
+		redis>ZINCRBY	scoreboard 4 Jerry   /n  "60"   //增加一个元素的分数，返回值是更改后的分数
+		redis>ZINCRBY 	scoreboard -4 Jerry	 /n	 "56"	//负数表示减分
+		
+	⑹获得集合中元素的数量
+		ZCARD key
+		redis>ZCARD scoreboard	/n	(integer) 6
+	
+	⑺获得指定分数范围内的元素
+		ZCOUNT key min max
+		redis>ZCOUNT scoreboard 90 100	/n	(integer) 2	
+		redis>ZCOUNT scoreboard (89 +inf	/n 	(integer) 2
+		
+	⑻删除一个或多个元素
+		ZREM	key member [member ...]
+		redis>ZREM scoreboard Wendy	/n	(integer) 1		//返回值是成功删除的元素数量（不包括本就不存在的）
+		
+	⑼按照排名范围排序
+		ZREMRANGEBYRANK	key start stop 	//按照元素分数从小到大的顺序（即索引0表示最小）删除在指定排名范围内的所有元素
+		redis>ZADD	testRem 1 a 2 b 3 c 4 d 5 a 6 f  /n  (integer) 6
+		redis>ZREMRANGEBYRANK 0 2 	/n (integer) 3
+		redis>ZRANGE testRem 0 -1   /n   1)"d" 2)"e" 3)"f"
+
+	⑽按照分数范围输出元素
+		ZREMRANGEBYSCORE key min max 
+		redis>ZREMRANGEBYSCORE testRem (4 5  /n  (integer) 1
+		redis>ZRANGE testRem 0 -1  /n  1)"d" 2"f"
+		
+	⑾获得元素的排名
+		ZRANK key member 		//按照元素分数从小到大的顺序获得指定的元素的排名（从0开始）
+		ZREVRANK key member 	//分数最大的元素排名为0 
+	
+	⑿计算有序集合的交集
+		ZINTERSTORE destination numkeys key [key ...] [WEIGHTS weight [weight ...]] [AGGREGATE SUM|MIN|MAX]
+			//用来计算多个有序集合的交集并将结果存储在destination键中（同样以有序集合类型存储），返回值为destination键中的元素个数
+			
+		destination键中元素的分数是由AGGREGATE参数决定
+			1.当AGGREGATE是SUM（默认值），destination键中元素的分数是每个参与计算的集合中该元素分数的和。
+			redis>ZADD sortedSets1 1 a 2 b		/n  (integer) 2
+			redis>ZADD sortedSets2 10 a 20 b 	/n 	(integer) 2
+			redis>ZINTERSTORE sortedSetsResult 2 sortedSets1 sortedSets2	/n  (integer) 2
+			redis>ZRANGE sortedSetsResult 0 -1 WITHSCORES  /n  1)"a" 2)"11" 3)"b" 4)"22"
+			
+			2.当AGGREGATE是MIN时，destination键中元素的分数是每个参与计算的集合中该元素分数的最小值
+			redis>ZINTERSTORE sortedSetsResult 2 sortedSets1 sortedSets2 AGGREGATE MIN  /n  (integer) 2
+			redis>ZRANGE sortedSetsResult 0 -1 WITHSCORES  /n  1)"a" 2)"1" 3)"b" 4)"2"
+			
+			3.当AGGREGATE是MAX时，destination键中元素的分数是每个参与计算的集合中该元素分数的最大值
+			redis>ZINTERSTORE sortedSetsResult 2 sortedSets1 sortedSets2 AGGREGATE MAX  /n  (integer) 2
+			redis>ZRANGE sortedSetsResult 0 -1 WITHSCORES  /n  1)"a" 2)"10" 3)"b" 4)"20"
+			
+			4.ZINTERSTORE命令还可以通过WEIGHTS 参数设置每个集合的权重，每个集合在参与计算时元素的分数会被乘上该集合的权重
+			redis>ZINTERSTORE sortedSetsResult 2 sortedSets1 sortedSets2 WEIGHTS 1 0.1   /n  (integer) 2
+			redis>ZRANGE sortedSetsResult 0 -1  WITHSCORES  /n  1)"a" 2)"2" 3)"b" 4)"4"
+			
+			
+事务
+	
+	Redis中的事务（transaction）是一组命令的集合。事务同命令一样都是Redis的最小执行单位，一个事务中的命令要么都执行，要么都不执行
+	事务的原理是先将属于一个事务的命令发送给Redis，然后再让Redis依次执行这些命令
+	demo: redis>MULTI   /n OK			//表示给Redis的命令属于一个事务，先不要执行而暂存
+		  redis>SADD "user:1:following" 2	/n QUEUED
+		  redis>SADD "user:2:followers" 1	/n QUEUED
+		  redis>EXEC 	/n  1)(integer) 1     2)(integer) 1
+	事务还可以保证一个事务内的命令依次执行而不被其它命令那个插入
+	!!语法错误可以在编译期间直接显示，所有命令都不会执行。
+	!!运行时错误会继续执行其它命令；而且没有回滚功能
+	
+	
+	WATCH命令
+		watch命令可以监控一个或多个键，一旦有一个键被修改（删除），之后的事务都不会执行。监控一直持续到EXEC命令
+		（事务中的命令是在EXEC之后才执行的，所以在MULTI命令后可以修改WATCH监控的键值）
+		demo: 	redis>SET key 1   /n OK 	
+				redis>WATCH key  /n  OK   
+				redis>SET key 2	 /n  OK 
+				redis>MULTI 	/n   OK
+				redis>SET key 3  /n  QUEUED
+				redis>EXEC 		/n   (nil)
+				redis>GET key  /n    "2"
+				例子中在执行WATCH命令后、事务执行前修改了key的值（SET key 2），所以最后事务中的命令SET key 3没有执行，EXEC命令返回空结果
+				
+生存时间
+
+	命令介绍 
+		关于限时优惠、缓存或验证码问题，过了一段时间就要删除的数据，
+			在关系数据库中一般需要额外的一个字段记录到期时间，然后定期检测删除过期数据
+			在Redis中可以使用EXPIRE命令设置一个键的生存时间，到时间后Redis会自动删除
+			
+		EXPIRE命令使用方法为EXPIRE key seconds,其中seconds参数表示键的生存时间
+			redis>SET session:29e3d uid1314  /n  OK
+			redis>EXPIRE session:29e3d 900	 /n  (integer) 1	//让session:29e3d键在15分钟后删除
+		
+		查询一个键还有多久的时间会被删除，可以使用TTL命令，返回值是键的剩余时间（单位：秒）
+			redis>SET foo bar 	/n OK
+			redis>EXPIRE foo 20 /n (integer) 1
+			redis>TTL foo  		/n (integer) 15
+			redis>TTL foo 		/n (integer) 7
+			redis>TTL foo       /n (integer) -1   //当键不存在时TTL命令返回-1，或者当键永久存在时候返回-1
+		
+		取消键的生存时间设置（即将键恢复成永久），可以使用PERSIST命令。
+			redis>SET foo bar    /n  OK
+			redis>EXPIRE foo 20  /n  (integer) 1	
+			redis>PERSIST foo    /n  (integer) 1	//生存时间被成功清除则返回1
+			redis>TTL foo 		 /n  (integer) -1	//键不存在或者本就是永久的
+			
+			或者使用SET、GETSET命令为键赋值也会清除键的生存时间
+			redis>EXPIRE foo 20  /n (integer) 1
+			redis>SET foo bar 	 /n OK
+			redis>TTL foo 		 /n (integer) -1 
+			
+			使用EXPIRE命令会重新设置键的生存时间
+			redis>SET foo bar	 /n OK
+			redis>EXPIRE foo 20	 /n (integer) 1
+			redis>TTL foo 		 /n (integer) 15
+			redis>EXPIRE foo 20	 /n OK
+			redis>TTL foo 		 /n (integer) 17
+			
+		PEXPIRE 控制键的生存时间单位是毫秒；EXPIRE 控制键的生存时间单位是秒
+	
+	作为缓存系统的设置
+		修改配置文件的maxmemory参数，限制redis最大可用内存大小（单位是字节），当超出这个限制时，Redis会依据maxmemory-policy参数指定
+		的策略来删除不需要的键，知道Redis占用的内存小于指定内存。
+		策略如下（LRU即最近最少使用）
+			volatile-lru		使用LRU算法删除一个键（只对设置了生存时间的键）
+			allkeys-lru			使用LRU算法删除一个键
+			volatile-random		随机删除一个键（只对设置了生存时间的键）
+			allkeys-random		随机删除一个键
+			volatile-ttl		删除生存时间最近的一个键
+			noeviction			不删除键，只返回错误
+	
+排序
+			
+		
