@@ -107,11 +107,11 @@ Tomcat配置文件 conf/server.xml
 	select * from pf_systemlog t where t.orgname='测试组' and createtime > to_date('2016-01-01', 'yyyy-mm-dd')
 	--查询并分组
 	select field1,MAX(field2),COUNT(field3),SUM(field4),..... from table GROUP BY field1
-	select '重点人' DQB类型,
+	select '人' DQB类型,
          b.xm 姓名,
          b.sfzh 身份证号,
          (select wm_concat(distinct c.type)
-            from BJSC_DQB_T_DICTIONARY_GABYW2 c
+            from T_DICTIONARY_GABYW2 c
            where c.typecode in
                  (select distinct substr(regexp_substr(b.zdryxl,
                                                        '[^,]+',
@@ -120,17 +120,17 @@ Tomcat配置文件 conf/server.xml
                                          0,
                                          2)
                     from dual
-                  connect by regexp_substr(b.zdryxl, '[^,]+', 1, level) is not null)) 重点人员类别标记,
+                  connect by regexp_substr(b.zdryxl, '[^,]+', 1, level) is not null)) 人员类别标记,
          (select wm_concat(c.detail)
-            from BJSC_DQB_T_DICTIONARY_GABYW2 c
+            from T_DICTIONARY_GABYW2 c
            where c.detail_type in
                  (select distinct regexp_substr(b.zdryxl, '[^,]+', 1, level)
                     from dual
-                  connect by regexp_substr(b.zdryxl, '[^,]+', 1, level) is not null)) 重点人员细类,
-         b.nrbjzdryksj 纳入部级重点人员库时间,
+                  connect by regexp_substr(b.zdryxl, '[^,]+', 1, level) is not null)) 人员细类,
+         b.nrbjzdryksj 入库时间,
          b.xzdxz 现住地详址,
          b.hjdxz 户籍地详址,
-         '外卖人员' 协议,
+         '人员' 协议,
          (select max(name)
             from BJSC_companyname c
            where c.code = d.icp_provider) 网站,
